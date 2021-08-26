@@ -7,6 +7,8 @@ MSLB is load balancing technology that does not depend on the application protoc
 
 * more info (Japanese)<br>
 https://github.com/matsuhira/MSLB/blob/master/about_mslb.md<br>
+* more info (English)<br>
+https://github.com/matsuhira/MSLB/blob/master/about_mslb_en.md
 
 ## spec
 https://tools.ietf.org/html/draft-matsuhira-mslb
