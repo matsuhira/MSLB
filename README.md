@@ -1,6 +1,6 @@
 # MSLB : Multi-Stage Transparent Server Load Balancing
 
-## about
+## abstruct / 概要
 MSLBは、アプリケーションプロトコルに依存しない負荷分散技術です。<br>
 
 MSLB is load balancing technology that does not depend on the application protocol.<br>
@@ -10,10 +10,10 @@ https://github.com/matsuhira/MSLB/blob/master/about_mslb.md<br>
 * more info (English)<br>
 https://github.com/matsuhira/MSLB/blob/master/about_mslb_en.md
 
-## spec
+## spec / 仕様
 https://tools.ietf.org/html/draft-matsuhira-mslb
 
-## implementation
+## implementation / 実装
 https://github.com/matsuhira/mslb-sasat
 
 ## patent statement
