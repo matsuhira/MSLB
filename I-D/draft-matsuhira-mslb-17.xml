@@ -1,0 +1,573 @@
+<?xml version="1.0" encoding="US-ASCII"?>
+<!DOCTYPE rfc SYSTEM "rfc2629.dtd">
+<?rfc toc="yes"?>
+<?rfc tocompact="yes"?>
+<?rfc tocdepth="3"?>
+<?rfc tocindent="yes"?>
+<?rfc symrefs="yes"?>
+<?rfc sortrefs="yes"?>
+<?rfc comments="yes"?>
+<?rfc inline="yes"?>
+<?rfc compact="yes"?>
+<?rfc subcompact="no"?>
+<rfc category="info" docName="draft-matsuhira-mslb-17" ipr="trust200902">
+  <front>
+    <title abbrev="MSLB">Multi-Stage Transparent Server Load Balancing</title>
+
+    <author fullname="Naoki Matsuhira" initials="N." surname="Matsuhira">
+      <organization>Neptela</organization>
+
+      <address>
+        <postal>
+          <street/>
+
+          <city/>
+
+          <code/>
+
+          <region/>
+
+          <country>Japan</country>
+        </postal>
+
+        <phone/>
+
+        <facsimile/>
+
+        <email>matsuhira.ietf@gmail.com</email>
+      </address>
+    </author>
+
+    <date day="7" month="October" year="2024"/>
+
+    <area/>
+
+    <workgroup/>
+
+    <keyword/>
+
+    <keyword/>
+
+    <abstract>
+      <t>This document specifies Multi-Stage Transparent Server Load Balancing
+      (MSLB) specification. MSLB makes server load balancing over Layer3
+      network without packet header change at client and server. MSLB makes
+      server load balancing with any protocol and protocol with encryption
+      such as IPsec ESP, SSL/TLS.</t>
+    </abstract>
+
+    <note title="Requirements Language">
+      <t>The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+      "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL" in this
+      document are to be interpreted as described in <xref
+      target="RFC2119">RFC 2119</xref>.</t>
+    </note>
+  </front>
+
+  <middle>
+    <section title="Introduction">
+      <t>This document specifies Multi-Stage Transparent Server Load Balancing
+      (MSLB) specification.</t>
+
+      <t>MSLB provides server load balancing function over Layer3 network
+      without packet header change at client and server. MSLB works with any
+      protocol and protocol with payload encryption such as IPsec ESP,
+      SSL/TLS.</t>
+    </section>
+
+    <section title="Traditional load balancing method">
+      <t>There are several load-balancing techniques, such as round-robin DNS,
+      <xref target="RFC1546">IP Anycasting</xref> and destination address
+      translation. <xref target="Fig-DNAT"/> shows a load-balancing system
+      with a typical server load balancer with destination address translation
+      technique.<figure anchor="Fig-DNAT">
+          <artwork><![CDATA[
+                                           +---------+   +--------+
+                                           |         +---+ Server |
+              +---------+   +----------+   |         |   +--------+
+              |         |   |          |   |         |        :
+ +--------+   |         |   |  Server  |   |         |   +--------+
+ | Client +---+ Network +---+   Load   +---+ Network +---+ Server |
+ +--------+   |         |   | Balancer |   |         |   +--------+
+              |         |   |          |   |         |        :
+              +---------+   +----------+   |         |   +--------+
+                                           |         +---+ Server |
+                                           +---------+   +--------+
+
+]]></artwork>
+        </figure></t>
+
+      <t>It is well-known that Network address translators break the <xref
+      target="RFC2775">internet transparency</xref> and have an <xref
+      target="RFC2993">application dependency</xref> characteristic.</t>
+
+      <t>Some server load balancers use application data, so with IPsec ESP,
+      SSL/TLS, these mechanisms may not work well.</t>
+    </section>
+
+    <section title="Architecture of MSLB">
+      <t>Load balancing is the technique that distributes packets to multiple
+      servers. For packet distribution, the destination address translation
+      technique is useful, however, this technique itself breaks internet
+      transparency.</t>
+
+      <t>After distribution, if writing back to the original destination
+      address may be possible, it is possible to recover transparency. This is
+      the basic idea and architecture of MSLB. <xref target="Fig-MSLBarch"/>
+      shows the architecture of MSLB.</t>
+
+      <figure anchor="Fig-MSLBarch">
+        <artwork><![CDATA[
+  Client ----  overwrite    +----------  write back  ----- server
+               destination  |
+               address      + ---------  write back  ----- server
+                            |
+                            :                 :              :
+
+                            + ---------  write back  ----- server
+
+]]></artwork>
+      </figure>
+
+      <t>This method processes only the destination address of the IP header.
+      This method can be applied to both IPv4 and IPv6.</t>
+    </section>
+
+    <section title="configuration">
+      <section title="basic configuration">
+        <t><xref target="Fig-basic-conf"/> shows a basic server load balancing
+        system with MSLB. This case two-stage configuration with one MSLB-F
+        and one-stage many MSLB-Bs.</t>
+
+        <t><figure anchor="Fig-basic-conf">
+            <artwork><![CDATA[
+                                   +-------+   +------+   +------+
+                                   |       +---+MSLB-B+---+Server|
+            +-------+   +------+   |       |   +------+   +------+
+            |       |   |      |   |       |       :          :
+ +------+   |       |   |      |   |       |   +------+   +------+
+ |Client+---+Network+---+MSLB-F+---+Network+---+MSLB-B+---+Server|
+ +------+   |       |   |      |   |       |   +------+   +------+
+            |       |   |      |   |       |       :          :
+            +-------+   +------+   |       |   +------+   +------+
+                                   |       +---+MSLB-B+---+Server|
+                                   +-------+   +------+   +------+
+
+
+	]]></artwork>
+          </figure></t>
+
+        <t>MSLB-F is a front function of MSLB and translates the destination
+        address to one of the addresses of MSLB-B. BSLB-B is the backend
+        function of MSLB and translates the destination address to the
+        original server address, i.e. address of MSLB-F. The IP address of
+        MSLB-F and all servers are the same value.</t>
+
+        <t>MSLB-F may multi-stage configuration. <xref
+        target="Fig-3stage-conf"/> shows a three-stage configuration with
+        two-stage MSLB-F and one-stage many MSLB-Bs.</t>
+
+        <t><figure anchor="Fig-3stage-conf">
+            <artwork><![CDATA[
+                                         +---+  +------+  +------+
+                                         |   |--+MSLB-B+--+Server|
+                          +---+          |   |  +------+  +------+
+                          |   |  +----+  |Net|      :         :
+           +---+  +----+  |   |  |MSLB|  |   |  +------+  +------+
+           |   |  |    |  |   |--+ -F +--+   |--+MSLB-B+--+Server|
+ +------+  |   |  |    |  |   |  +----+  +---+  +------+  +------+
+ |Client+--+Net+--+MSLB+--+Net|               
+ +------+  |   |  | -F |  |   |  +----+  +---+  +------+  +------+
+           |   |  |    |  |   +--+MSLB+--+   |--+MSLB-B+--+Server|
+           +---+  +----+  |   |  | -F |  |   |  +------+  +------+
+                          |   |  +----+  |Net|      :         :
+                          +---+          |   |  +------+  +------+
+                                         |   |--+MSLB-B+--+Server|
+                                         +---*  +------+  +------+
+	]]></artwork>
+          </figure></t>
+      </section>
+
+      <section title="one arm configuration">
+        <t><xref target="Fig-one-arm"/> shows one arm configuration of the
+        server load balancing system with MSLB.</t>
+
+        <t><figure anchor="Fig-one-arm">
+            <artwork><![CDATA[
+                +---------+
+                |         |
+                | MSLB-F  |
+                |         |
+                +----+----+
+                     |
+                +----+----+   +--------+   +--------+
+                |         +---+ MSLB-B +---+ Server |
+                |         |   +--------+   +--------+
+                |         |       :            :
+ +--------+     |         |   +--------+   +--------+
+ | Client |-----+ Network +---+ MSLB-B +---+ Server |
+ +--------+     |         |   +--------+   +--------+
+                |         |       :            :
+                |         |   +--------+   +--------+
+                |         +---+ MSLB-B +---+ Server |
+                +---------+   +--------+   +--------+
+
+
+	]]></artwork>
+          </figure></t>
+
+        <t>MSLB-F is a front function of MSLB and translates the destination
+        address to one of the addresses of MSLB-B. BSLB-B is a backend
+        function of MSLB and translates the destination address to the
+        original server address, i.e. address of MSLB-F. The IP address of
+        MSLB-F and all servers are the same value.</t>
+
+        <t>In this configuration, MSLB-F connects to the network with a single
+        link, that is one arm configuration. In this case, the return packet,
+        i.e.packet from server to client does not pass through the MSLB-F.</t>
+      </section>
+    </section>
+
+    <section title="mode">
+      <t>MSLB has two modes, one is address translation mode, and the other is
+      encapsulation mode.</t>
+
+      <section title="address translation mode">
+        <t>This mode uses an address translation technique.</t>
+
+        <t>Figure <xref target="Fig-nat-mode"> </xref> shows packet processing
+        with address translation mode.</t>
+
+        <t><figure anchor="Fig-nat-mode">
+            <artwork><![CDATA[
+                                   +-------+   +------+   +------+
+                                   |       +---+MSLB-B+---+Server|
+ +------+                          |       |   | IP_B1|   | IP_S |
+ |Client|   +-------+   +------+   |       |   +------+   +------+
+ | IP_C1+---+       |   |      |   |       |
+ +------+   |       |   |      |   |       |   +------+   +------+
+            |Network|   |MSLB-F|---+Network+---+MSLB-B+---+Server|
+            |       +---+      |   |       |   | IP_B2|   | IP_S |
+ +------+   |       |   | IP_S |   |       |   +------+   +------+
+ |Client+---+       |   |      |   |       |
+ | IP_C2|   +-------+   +------+   |       |   +------+   +------+
+ +------+                          |       +---+MSLB-B+---+Server|
+                                   |       |   | IP_B3|   | IP_S |
+                                   +-------+   +------+   +------+
+                           :                       :
+                           :                       :
+   +------+----+           :   +------+----+       :+------+----+
+   | data | IP |           :   | data | IP |       :| data | IP |
+   +------+----+           :   +------+----+       :+------+----+
+   ----------------------> : --------------------> : ------------>
+     src = IP_C1           :    src = IP_C1        :   src = IP_C1
+     dst = IP_S            :    dst = IP_B1        :   dst = IP_S
+                           :                       :
+   +------+----+           :   +------+----+       :+------+----+
+   | data | IP |           :   | data | IP |       :| data | IP |
+   +------+----+           :   +------+----+       :+------+----+
+   <--------------------- -: <-------------------- : <------------
+     src = IP_S            :    src = IP_S         :   src = IP_S
+     dst = IP_C1           :    dst = IP_C1        :   dst = IP_C1
+                           :                       :
+
+
+
+
+
+	]]></artwork>
+          </figure></t>
+
+        <t>In this figure, to the client, the IP address is allocated IP_C1,
+        IP_C2, and the server IP address is IP_S. In this case, IP_S is also
+        allocated to all servers and MSLB-F. And to the MSLB-B, IP_B1, IP_B2,
+        IP_B3 is allocated. This allocation is shown in the upper part of
+        <xref target="Fig-nat-mode"/>.</t>
+
+        <t>The lower part of <xref target="Fig-nat-mode"/> shows packet
+        transfered between client and server. From the client to the server,
+        only the destination address is translated, MSLB-F translates from
+        IP_S to IP_B1, and MSLB-B translate from IP_B1 to IP_S. Then the
+        destination address of the packet sent to the client and the
+        destination address of the packet that receives the server are the
+        same. That means transparency remains.</t>
+
+        <t>Return packet, i.e., from the server to the client is not
+        translated, it just forwarded.</t>
+
+        <t>On the Internet, the client IP address and server IP address must
+        Global IP address, however, the IP address of MSLB-B may private IP
+        address.</t>
+
+        <figure anchor="Fig-nat-mode-tab">
+          <artwork><![CDATA[
+ +--------------------+----------+-------------------------+
+ | Source IP address  | net mask | destination IP address  |
+ +--------------------+----------+-------------------------+
+ |  IP_C1             |          |  IP_B1                  |
+ +--------------------+----------+-------------------------+
+ |  IP_C2             |          |  IP_B2                  |
+ +--------------------+----------+-------------------------+
+ |        :           |    :     |             :           |
+ |        :           |    :     |             :           |
+ |        :           |    :     |             :           |
+ +--------------------+----------+-------------------------+
+  
+
+]]></artwork>
+        </figure>
+
+        <t><xref target="Fig-nat-mode-tab"/> shows the MSLB table. MSLB has
+        this table and translates the destination address using this table
+        value. MSLB-F checks the source IP address and translates the
+        destination address with this table.</t>
+
+        <t>Using IPv4-IPv6 translation may be possible, i.e., IPv4 packet
+        translated to IPv6, then translate to IPv4 or IPv6 packet translate to
+        IPv4, then translate IPv6 may possible<xref
+        target="Fig-nat-mode-case"/> shows possible combination of IPv4 and
+        IPv6. These IPv4-IPv6 translation cases will be defined in the
+        future.</t>
+
+        <t><figure anchor="Fig-nat-mode-case">
+            <artwork><![CDATA[
+     Client     MSLB-F         MSLB-B     Server
+                  :              :
+                  :              :
+(1)  <-- IPv4 --> : <-- IPv4 --> : <-- IPv4 --> 
+                  :              :
+(2)  <-- IPv6 --> : <-- IPv6 --> : <-- IPv6 -->
+                  :              :
+(3)  <-- IPv4 --> : <-- IPv6 --> : <-- IPv4 -->
+                  :              :
+(4)  <-- IPv6 --> : <-- IPv4 --> : <-- IPv6 -->
+                  :              :
+
+]]></artwork>
+          </figure></t>
+      </section>
+
+      <section title="encapsulation mode">
+        <t>This mode uses an encapsulation technique.</t>
+
+        <t>Figure <xref target="Fig-tun-mode"/> shows packet processing with
+        encapsulation mode.</t>
+
+        <t><figure anchor="Fig-tun-mode">
+            <artwork><![CDATA[
+                                   +-------+   +------+   +------+
+                                   |       +---+MSLB-B+---+Server|
+                                   |       |   | IP_B1|   | IP_S |
+            +-------+   +------+   |       |   +------+   +------+
+            |       |   |      |   |       |
+ +------+   |       |   |      |   |       |   +------+   +------+
+ |Client|---+Network+---+MSLB-F|---+Network+---+MSLB-B+---+Server|
+ | IP_C |   |       |   |      |   |       |   | IP_B2|   | IP_S |
+ +------+   |       |   | IP_S |   |       |   +------+   +------+
+            |       |   |      |   |       |
+            +-------+   +------+   |       |   +------+   +------+
+                                   |       +---+MSLB-B+---+Server|
+                                   |       |   | IP_B3|   | IP_S |
+                                   +-------+   +------+   +------+
+                           :                       :
+                           :                       :
+   +------+----+           :   +------+----+----+  :+------+----+
+   | data | IP |           :   | data | IP | IP |  :| data | IP |
+   +------+----+           :   +------+----+----+  :+------+----+
+   ----------------------> : --------------------> : ------------>
+     src = IP_C            :   Inner header        :   src = IP_C
+     dst = IP_S            :    src = IP_C         :   dst = IP_S
+                           :    dst = IP_S         :
+                           :   Outer header        :
+                           :    src = IP_S         :
+                           :    dst = IP_B1        :
+                           :                       :
+                           :                       :
+                           :                       :
+   +------+----+           :   +------+----+       :+------+----+
+   | data | IP |           :   | data | IP |       :| data | IP |
+   +------+----+           :   +------+----+       :+------+----+
+   <--------------------- -: <-------------------- : <------------
+     src = IP_S            :    src = IP_S         :   src = IP_S
+     dst = IP_C            :    dst = IP_C         :   dst = IP_C
+                           :                       :
+
+
+
+
+
+	]]></artwork>
+          </figure></t>
+
+        <t>In this figure, to the client, the IP address is allocated IP_C1,
+        IP_C2, and the server IP address is IP_S. In this case, IP_S is also
+        allocated to all servers and MSLB-F. And to the MSLB-B, IP_B1, IP_B2,
+        IP_B3 is allocated. This allocation is shown in the upper part of
+        <xref target="Fig-nat-mode"/>.</t>
+
+        <t>The lower part of <xref target="Fig-nat-mode"/> shows packet
+        transfered between client and server. From the client to the server,
+        MSLB-F encapsulates the original IP packet and sends it to MSLB-B.
+        MSLB-B decapsulates the outer IP header and forwards it to the server.
+        The inner IP packet does not change, which means, transparency is
+        remained.</t>
+
+        <t>With encapsulation mode, packet size is increased, so fragmentation
+        is needed if the encapsulated packet size exceeds MTU or Path MTU.
+        MSLB-F MUST support <xref target="RFC1853">tunnel MTU
+        discovery</xref>. Fragmentation and <xref target="RFC1191">Path MTU
+        discovery</xref> issue will be described in the future.</t>
+
+        <t>Return packet, i.e., from the server to the client is not
+        encapsulated, just forwarded.</t>
+
+        <t>On the Internet, the client IP address and the server IP address
+        must Global IP address, however, the IP address of MSLB-B may private
+        IP address.</t>
+
+        <t><figure anchor="FIg-tun-mode-tab">
+            <artwork><![CDATA[
+ +--------------------+----------+-------------------------+
+ | Source IP address  | net mask | destination IP address  |
+ +--------------------+----------+-------------------------+
+ |  IP_C1             |          |  IP_B1                  |
+ +--------------------+----------+-------------------------+
+ |  IP_C2             |          |  IP_B2                  |
+ +--------------------+----------+-------------------------+
+ |        :           |    :     |             :           |
+ |        :           |    :     |             :           |
+ |        :           |    :     |             :           |
+ +--------------------+----------+-------------------------+
+  
+
+]]></artwork>
+          </figure></t>
+
+        <t><xref target="FIg-tun-mode-tab"/> shows the MSLB table. MSLB has
+        this table and encapsulates and generates an outer header with the
+        destination address using this table value. MSLB-F checks the source
+        IP address and generates the destination address of the outer header
+        with this table.</t>
+
+        <t>Using IPv4 over IPv6 encapsulation or IPv6 over IPv4 encapsulation
+        may be possible, i.e., IPv4 packet encapsulated to IPv6, then
+        decapsulate to IPv4 or IPv6 packet encapsulated to IPv4, then
+        de-encapsulated IPv6 may be possible. <xref
+        target="Fig-tun-mode-case"/> shows the possible combination of IPv4
+        and IPv6. These IPv4-IPv6 encapsulation cases will be defined in the
+        future.</t>
+
+        <t><figure anchor="Fig-tun-mode-case">
+            <artwork><![CDATA[
+     Client     MSLB-F                   MSLB-B     Server
+                  :                        :
+                  :                        :
+(1)  <-- IPv4 --> : <-- IPv4 over IPv4 --> : <-- IPv4 --> 
+                  :                        :
+(2)  <-- IPv6 --> : <-- IPv6 over IPv6 --> : <-- IPv6 -->
+                  :                        :
+(3)  <-- IPv4 --> : <-- IPv4 over IPv6 --> : <-- IPv4 -->
+                  :                        :
+(4)  <-- IPv6 --> : <-- IPv6 over IPv4 --> : <-- IPv6 -->
+                  :                        :
+
+]]></artwork>
+          </figure></t>
+      </section>
+    </section>
+
+    <section title="Ingress filtering environment">
+      <t><xref target="RFC2827"/> describes ingress filtering for defending
+      against DoS attacks that employ IP source address spoofing.</t>
+
+      <t>Depending on the location of the MSLB-F and MSLB-B, packets from the
+      server to the client may be discarded by ingress filtering. In such a
+      case, encapsulating the packet from server to client might resolve.
+      <xref target="Fig-ingress-filtering"/> shows such a solution.</t>
+
+      <t><figure anchor="Fig-ingress-filtering">
+          <artwork><![CDATA[
+                                   +-------+   +------+   +------+
+                                   |       +---+MSLB-B+---+Server|
+ +------+                          |       |   | IP_B1|   | IP_S |
+ |Client|   +-------+   +------+   |       |   +------+   +------+
+ | IP_C1+---+       |   |      |   |       |
+ +------+   |       |   |      |   |       |   +------+   +------+
+            |Network|   |MSLB-F|---+Network+---+MSLB-B+---+Server|
+            |       +---+      |   |       |   | IP_B2|   | IP_S |
+ +------+   |       |   | IP_S |   |       |   +------+   +------+
+ |Client+---+       |   |      |   |       |
+ | IP_C2|   +-------+   +------+   |       |   +------+   +------+
+ +------+                          |       +---+MSLB-B+---+Server|
+                                   |       |   | IP_B3|   | IP_S |
+                                   +-------+   +------+   +------+
+
+                           :                       :
+   +------+----+           :   +------+----+----+  :+------+----+
+   | data | IP |           :   | data | IP | IP |  :| data | IP |
+   +------+----+           :   +------+----+----+  :+------+----+
+   <--------------------- -: <-------------------- : <------------
+     src = IP_S            :   Inner header        :   src = IP_S
+     dst = IP_C            :    src = IP_S         :   dst = IP_C
+                           :    dst = IP_C         :
+                           : Outer header          :
+                           :    src = IP_B1
+                           :    dst = IP_TBD
+
+
+
+
+	]]></artwork>
+        </figure></t>
+    </section>
+
+    <section title="Characteristic">
+      <t>MSLB has the following characteristics.</t>
+
+      <t><list style="symbols">
+          <t>Layer 3 Load balancer</t>
+
+          <t>Support NAT unfriendly applications such as FTP</t>
+
+          <t>Work with any application layer protocol (maybe)</t>
+
+          <t>Work with encryption (IPsec ESP, SSL/TLS)</t>
+
+          <t>Work over Layer 3 network</t>
+
+          <t>May enforce policy with static configuration</t>
+        </list></t>
+    </section>
+
+    <section anchor="IANA" title="IANA Considerations">
+      <t>This document does not request IANA.</t>
+
+      <t>Note to RFC Editor: this section may be removed on publication as an
+      RFC.</t>
+    </section>
+
+    <section anchor="Security" title="Security Considerations">
+      <t>Security consideration is not discussed in this memo.</t>
+    </section>
+
+    <section anchor="Acknowledgements" title="Acknowledgements"/>
+  </middle>
+
+  <back>
+    <references title="Normative References">
+      <?rfc include="http://xml.resource.org/public/rfc/bibxml/reference.RFC.2119.xml"?>
+
+      <?rfc include="http://xml.resource.org/public/rfc/bibxml/reference.RFC.1546.xml"?>
+
+      <?rfc include="http://xml.resource.org/public/rfc/bibxml/reference.RFC.2827.xml"?>
+
+      <?rfc include="http://xml.resource.org/public/rfc/bibxml/reference.RFC.2775.xml"?>
+
+      <?rfc include="http://xml.resource.org/public/rfc/bibxml/reference.RFC.2993.xml"?>
+
+      <?rfc include="http://xml.resource.org/public/rfc/bibxml/reference.RFC.1853.xml"?>
+
+      <?rfc include="http://xml.resource.org/public/rfc/bibxml/reference.RFC.1191.xml"?>
+    </references>
+  </back>
+</rfc>
